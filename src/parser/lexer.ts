@@ -1,38 +1,20 @@
-export enum TokenType {
-  IDENT = 'IDENT', // identifier
-  STRING_LITERAL = 'STRING_LITERAL', // "string"
-  NUMBER = 'NUMBER', // number with optional decimal point but without sign
-  AND = 'AND', // boolean operators
-  NULL = 'NULL', LIKE = 'LIKE', // keywords
-  EQ = 'EQ', NEQ = 'NEQ', // comparison operators
-  LPAR = 'LPAR', RPAR = 'RPAR', // parenthesis
-  EOF = 'EOF',
-  BAD = 'BAD', // bad token
-}
-
-export interface Token {
-  span: Span;
-  type: TokenType;
-  value?: string;
-}
-
-// TODO Can span only one line, add support of multiline spans.
-export interface Span {
-  from: number;
-  to: number;
-}
-
-export interface Error {
-  (span: Span, message: string): void;
-}
-
+import {Error, Span, Token, TokenType} from "./model.js";
 
 const KEYWORDS = {
+  "OR": TokenType.OR,
   "AND": TokenType.AND,
+  "IS": TokenType.IS,
   "NULL": TokenType.NULL,
+  "NOW": TokenType.NOW,
   "EQ": TokenType.EQ,
   "NEQ": TokenType.NEQ,
+  "LT": TokenType.LT,
+  "LTE": TokenType.LTE,
+  "GT": TokenType.GT,
+  "GTE": TokenType.GTE,
+  "IN": TokenType.IN,
   "LIKE": TokenType.LIKE,
+  "NOT": TokenType.NOT,
 };
 
 export const EMPTY_SPAN: Span = {from: 0, to: 0};
@@ -40,7 +22,6 @@ export const EMPTY_SPAN: Span = {from: 0, to: 0};
 export class Lexer {
   private position = 0;
   private startc: number = 0;
-  private previousc: number = 0;
   private badCharsSpan: Span = EMPTY_SPAN;
   private badChars = "";
 
@@ -56,26 +37,6 @@ export class Lexer {
       if (currentChar == '') {
         return this.token(TokenType.EOF);
       }
-
-      if (currentChar == '!') {
-        let nextChar = this.nextChar();
-        if (nextChar == '=') {
-          // not equal operator
-          return this.token(TokenType.NEQ);
-        } else {
-          if (this.badChars == "") {
-            this.badCharsSpan = this.makeSpan();
-          } else {
-            this.badCharsSpan = mergeSpan([this.badCharsSpan, this.makeSpan()]);
-          }
-          this.badChars += currentChar;
-        }
-      }
-
-      if (currentChar == '=') {
-        return this.token(TokenType.EQ);
-      }
-
 
       if (currentChar == '\'' || currentChar == '\"') {
         return this.stringLiteral(currentChar);
@@ -96,6 +57,56 @@ export class Lexer {
       // end block in parentheses
       if (currentChar == ')') {
         return this.token(TokenType.RPAR);
+      }
+      // start array
+      if (currentChar == '[') {
+        return this.token(TokenType.LBRACE);
+      }
+      //end array
+      if (currentChar == ']') {
+        return this.token(TokenType.RBRACE);
+      }
+
+
+      if (currentChar == '=') {
+        return this.token(TokenType.EQ);
+      }
+
+      // not or notEquals operators
+      if (currentChar == '!') {
+        let nextChar = this.nextChar();
+        if (nextChar == '=') {
+          // not equal operator
+          return this.token(TokenType.NEQ);
+        } else {
+          // not operator (pushback next char that does not belong to this token)
+          this.pushback(nextChar);
+          return this.token(TokenType.NOT);
+        }
+      }
+
+      // lowerThan, lowerThanOrEq, greaterThan, greaterThanOrEq operators
+      if (currentChar == '<') {
+        let nextChar = this.nextChar();
+        if (nextChar == '=') {
+          // lower than or equal operator
+          return this.token(TokenType.LTE);
+        } else {
+          // lower than operator (pushback next char that does not belong to this token)
+          this.pushback(nextChar);
+          return this.token(TokenType.LT);
+        }
+      }
+      if (currentChar == '>') {
+        let nextChar = this.nextChar();
+        if (nextChar == '=') {
+          // lower than or equal operator
+          return this.token(TokenType.GTE);
+        } else {
+          // lower than operator (pushback next char that does not belong to this token)
+          this.pushback(nextChar);
+          return this.token(TokenType.GT);
+        }
       }
 
       if (!this.isSpace(currentChar)) {
